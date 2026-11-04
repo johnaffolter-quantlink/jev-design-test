@@ -1,0 +1,14 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tip Split</title>
+<style>body{font:18px system-ui;max-width:360px;margin:2em auto;padding:0 16px}label{display:block;margin:.8em 0}input{font:inherit;width:100%;box-sizing:border-box;padding:6px}output{display:block;font-size:1.6em;margin-top:1em}</style>
+<h1>Tip Split</h1>
+<label>Bill <input id="b" type="number" min="0" step="0.01" value="60"></label>
+<label>Tip % <input id="t" type="number" min="0" value="20"></label>
+<label>People <input id="n" type="number" min="1" value="3"></label>
+<output id="o"></output>
+<script>
+const $=i=>document.getElementById(i);
+function calc(){const b=+$('b').value,t=+$('t').value,n=Math.max(1,Math.floor(+$('n').value));
+ const total=b*(1+t/100);$('o').textContent='$'+(total/n).toFixed(2)+' each ($'+total.toFixed(2)+' total)'}
+['b','t','n'].forEach(i=>$(i).addEventListener('input',calc));calc();
+</script></html>

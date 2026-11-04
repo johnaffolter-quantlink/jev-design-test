@@ -1,0 +1,341 @@
+#!/usr/bin/env python3
+"""vibe -- tiny, dependency-free tooling for a ledger of one-off vibe-coded apps.
+
+Reads the `prompts.md` convention (a superset of paulkaefer/vibe-coding's
+CONVENTIONS.md) and turns it into something queryable.
+
+  vibe.py new <name> [--tool T] [--group G]   scaffold a project folder
+  vibe.py check [--strict]                    lint every prompts.md
+  vibe.py build                               write catalog.json + index.html
+  vibe.py stats                               what's actually working?
+  vibe.py capture <session.jsonl> <project>   append prompts/outputs from a
+                                              Claude Code transcript
+  vibe.py stale [--days N]                    prototypes nobody touched
+
+Markdown stays the source of truth; everything else is generated.
+"""
+import argparse, datetime as dt, html, json, re, subprocess, sys
+from collections import Counter
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+PROJECTS = ROOT / "projects"
+REQUIRED = ["Files", "Dates", "Defaults", "Status", "Use", "Reusability",
+            "Tags", "Takeaway", "Story value", "Surprises"]
+STATUS = {"prototype", "keeper", "abandoned"}
+VERIFIED = ["not-run", "syntax-checked", "agent-tested", "human-tested"]
+STORY = {"none", "anecdote", "case study", "chapter-worthy"}
+LEVELS = {"low", "medium", "high"}
+FIELD = re.compile(r"^>\s*-\s*\*\*(.+?):\*\*\s*(.*)$")
+
+
+# ---------------------------------------------------------------- parsing
+def known_tags():
+    txt = (ROOT / "CONVENTIONS.md").read_text()
+    sec = txt.split("## Tags", 1)[-1].split("\n## ", 1)[0]
+    return set(re.findall(r"^\|\s*`([^`]+)`", sec, re.M))
+
+
+def parse_fields(lines):
+    out = {}
+    for ln in lines:
+        m = FIELD.match(ln)
+        if m:
+            out[m.group(1).strip()] = m.group(2).strip()
+    return out
+
+
+def parse_prompts_md(path):
+    """Return a list of project dicts found in one prompts.md (groups have many)."""
+    text = path.read_text()
+    parts = re.split(r"^(?=# Project:)", text, flags=re.M)
+    projects = []
+    for part in parts:
+        m = re.match(r"# Project:\s*(.+)", part)
+        if not m:
+            continue
+        body = part.splitlines()
+        head = []
+        for ln in body[1:]:
+            if re.match(r"#{1,2}\s*(Prompt|Output)", ln):
+                break
+            head.append(ln)
+        prompts = []
+        for blk in re.split(r"^(?=# Prompt)", part, flags=re.M)[1:]:
+            ctx = []
+            for ln in blk.splitlines()[1:]:
+                if ln.startswith(">") or not ln.strip():
+                    ctx.append(ln)
+                else:
+                    break
+            prompts.append(parse_fields(ctx))
+        projects.append({
+            "name": m.group(1).strip(),
+            "path": str(path.relative_to(ROOT)),
+            "folder": path.parent,
+            "fields": parse_fields(head),
+            "prompts": prompts,
+        })
+    return projects
+
+
+def load_all():
+    found = []
+    for p in sorted(PROJECTS.rglob("prompts.md")):
+        found += parse_prompts_md(p)
+    return found
+
+
+def split_csv(v):
+    return [x.strip() for x in v.split(",") if x.strip()]
+
+
+def best_verified(proj):
+    vs = [p.get("Verified", "") for p in proj["prompts"]]
+    idx = [VERIFIED.index(v) for v in vs if v in VERIFIED]
+    return VERIFIED[max(idx)] if idx else "TBD"
+
+
+def to_record(proj):
+    f = proj["fields"]
+    files = split_csv(f.get("Files", ""))
+    rel = proj["folder"].relative_to(ROOT)
+    tools = {p.get("Tool", "").split(" · 20")[0] for p in proj["prompts"] if p.get("Tool")}
+    tools.add(f.get("Defaults", ""))
+    reuse = f.get("Reusability", "")
+    ra = re.search(r"artifact\s+(\w+)", reuse)
+    rp = re.search(r"prompt pattern\s+(\w+)", reuse)
+    return {
+        "name": proj["name"], "folder": str(rel), "source": proj["path"],
+        "files": files,
+        "open": next((str(rel / x) for x in files if x.endswith(".html")), None),
+        "dates": f.get("Dates", "TBD"), "defaults": f.get("Defaults", "TBD"),
+        "tools": sorted(t for t in tools if t and t != "TBD"),
+        "status": f.get("Status", "TBD"), "use": f.get("Use", "TBD"),
+        "artifact_reuse": ra.group(1) if ra else "TBD",
+        "prompt_reuse": rp.group(1) if rp else "TBD",
+        "tags": split_csv(f.get("Tags", "")),
+        "takeaway": f.get("Takeaway", "TBD"),
+        "story_value": f.get("Story value", "TBD"),
+        "surprises": f.get("Surprises", "TBD"),
+        "prompt_count": len(proj["prompts"]),
+        "verified": best_verified(proj),
+    }
+
+
+# ----------------------------------------------------------------- check
+def cmd_check(a):
+    tags, errs, warns = known_tags(), [], []
+    projs = load_all()
+    if not projs:
+        print("no projects found"); return 0
+    for pr in projs:
+        n, f, where = pr["name"], pr["fields"], pr["path"]
+        e = lambda m: errs.append(f"{where} [{n}]: {m}")
+        w = lambda m: warns.append(f"{where} [{n}]: {m}")
+        for k in REQUIRED:
+            if k not in f: e(f"missing field '{k}' (write TBD, don't omit)")
+        if f.get("Status") not in STATUS | {"TBD", None}: e(f"bad Status {f['Status']!r}")
+        if f.get("Story value") not in STORY | {"TBD", None}: e(f"bad Story value {f['Story value']!r}")
+        if "Reusability" in f and f["Reusability"] != "TBD":
+            for part in ("artifact", "prompt pattern"):
+                m = re.search(part + r"\s+(\w+)", f["Reusability"])
+                if not m or m.group(1) not in LEVELS | {"TBD"}: e(f"Reusability needs '{part} low|medium|high'")
+        for t in split_csv(f.get("Tags", "")):
+            if t not in tags and t != "TBD": e(f"unknown tag '{t}' (add it to CONVENTIONS.md first)")
+        for x in split_csv(f.get("Files", "")):
+            if x != "TBD" and not (pr["folder"] / x).exists():
+                (e if f.get("Status") == "keeper" else w)(f"listed file '{x}' not found")
+        if not pr["prompts"]: e("no '# Prompt' sections")
+        for i, p in enumerate(pr["prompts"], 1):
+            if p.get("Verified") not in VERIFIED: e(f"prompt {i}: Verified must be one of {VERIFIED}")
+            if "Tool" not in p and f.get("Defaults", "TBD") == "TBD": e(f"prompt {i}: no Tool and no Defaults")
+            if "Human edits" not in p: w(f"prompt {i}: no 'Human edits' line")
+        if not re.fullmatch(r"[a-z0-9]+(_[a-z0-9]+)*", pr["folder"].name):
+            w("folder name is not snake_case")
+        # honesty rules: claims need evidence
+        if f.get("Status") == "keeper" and f.get("Use", "none yet").lower().startswith(("none", "tbd")):
+            w("keeper with no recorded real Use")
+        if f.get("Status") == "keeper" and best_verified(pr) in ("not-run", "TBD"):
+            e("keeper but nothing above 'not-run' -- verify it or demote it")
+        tbd = sum(1 for k in REQUIRED if f.get(k) == "TBD")
+        if tbd > 4: w(f"{tbd} fields still TBD")
+    for m in warns: print("warn ", m)
+    for m in errs: print("error", m)
+    print(f"{len(projs)} projects, {len(errs)} errors, {len(warns)} warnings")
+    return 1 if errs or (a.strict and warns) else 0
+
+
+# ----------------------------------------------------------------- build
+PAGE = """<!doctype html><html lang="en"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vibe Ledger</title>
+<style>
+:root{--bg:#fff;--fg:#1b1b1f;--mut:#6b6b76;--card:#f5f5f8;--line:#dcdce4;--acc:#4b4bd6}
+@media(prefers-color-scheme:dark){:root{--bg:#121216;--fg:#ececf1;--mut:#9a9aa8;--card:#1c1c22;--line:#2f2f3a;--acc:#9a9aff}}
+body{margin:0 auto;max-width:980px;padding:24px 16px;font:16px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--fg)}
+h1{margin:0}.sub{color:var(--mut);margin:.2em 0 1.2em}
+.bar{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
+input,select{font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+.card h3{margin:0 0 4px}.card a{color:var(--acc)}
+.tag,.pill{display:inline-block;font-size:12px;border:1px solid var(--line);border-radius:99px;padding:1px 8px;margin:2px 4px 2px 0;color:var(--mut)}
+.pill.keeper{color:var(--acc);border-color:var(--acc)}
+.mut{color:var(--mut);font-size:14px}
+</style>
+<h1>Vibe Ledger</h1>
+<p class="sub" id="sub"></p>
+<div class="bar"><input id="q" placeholder="search…" type="search">
+<select id="st"><option value="">any status</option><option>keeper</option><option>prototype</option><option>abandoned</option></select>
+<select id="tg"><option value="">any tag</option></select>
+<select id="vf"><option value="">any verification</option><option>human-tested</option><option>agent-tested</option><option>syntax-checked</option><option>not-run</option></select></div>
+<div class="grid" id="g"></div>
+<script id="data" type="application/json">__DATA__</script>
+<script>
+const D=JSON.parse(document.getElementById('data').textContent);
+const $=id=>document.getElementById(id), esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+[...new Set(D.flatMap(p=>p.tags))].sort().forEach(t=>$('tg').add(new Option(t)));
+$('sub').textContent=D.length+' projects · '+D.filter(p=>p.status==='keeper').length+' keepers · built __DATE__';
+function draw(){const q=$('q').value.toLowerCase(),s=$('st').value,t=$('tg').value,v=$('vf').value;
+ const rank={keeper:0,prototype:1,abandoned:2};
+ $('g').innerHTML=D.filter(p=>(!s||p.status===s)&&(!t||p.tags.includes(t))&&(!v||p.verified===v)&&(!q||JSON.stringify(p).toLowerCase().includes(q)))
+ .sort((a,b)=>(rank[a.status]??3)-(rank[b.status]??3)||a.name.localeCompare(b.name))
+ .map(p=>`<div class="card"><h3>${p.open?`<a href="${esc(p.open)}">${esc(p.name)}</a>`:esc(p.name)}</h3>
+ <span class="pill ${esc(p.status)}">${esc(p.status)}</span><span class="pill">${esc(p.verified)}</span>
+ <p>${esc(p.takeaway)}</p><p class="mut">Use: ${esc(p.use)}<br>${esc(p.defaults)} · ${p.prompt_count} prompt(s) · ${esc(p.dates)}</p>
+ <p class="mut"><a href="${esc(p.source)}">prompts &amp; outputs</a></p>${p.tags.map(x=>`<span class="tag">${esc(x)}</span>`).join('')}</div>`).join('')||'<p class="mut">nothing matches</p>'}
+['q','st','tg','vf'].forEach(i=>$(i).addEventListener('input',draw));draw();
+</script></html>"""
+
+
+def cmd_build(a):
+    recs = [to_record(p) for p in load_all()]
+    (ROOT / "catalog.json").write_text(json.dumps(recs, indent=2) + "\n")
+    data = json.dumps(recs).replace("</", "<\\/")
+    (ROOT / "index.html").write_text(
+        PAGE.replace("__DATA__", data).replace("__DATE__", dt.date.today().isoformat()))
+    print(f"wrote catalog.json and index.html ({len(recs)} projects)")
+    return 0
+
+
+# ----------------------------------------------------------------- stats
+def cmd_stats(a):
+    recs = [to_record(p) for p in load_all()]
+    if not recs: print("no projects"); return 0
+    c = lambda k: Counter(r[k] for r in recs).most_common()
+    print(f"{len(recs)} projects, {sum(r['prompt_count'] for r in recs)} prompts")
+    for label, key in [("status", "status"), ("verified", "verified"),
+                       ("artifact reuse", "artifact_reuse"), ("prompt reuse", "prompt_reuse")]:
+        print(f"{label:15}", ", ".join(f"{k}={v}" for k, v in c(key)))
+    print("tools          ", ", ".join(f"{k}={v}" for k, v in Counter(t for r in recs for t in r["tools"]).most_common()))
+    print("tags           ", ", ".join(f"{k}={v}" for k, v in Counter(t for r in recs for t in r["tags"]).most_common()))
+    used = [r for r in recs if not r["use"].lower().startswith(("none", "tbd"))]
+    print(f"actually used  {len(used)}/{len(recs)}")
+    mul = [r for r in recs if r["prompt_count"] > 1]
+    print(f"needed >1 prompt: {len(mul)}/{len(recs)}")
+    return 0
+
+
+def cmd_stale(a):
+    cutoff = dt.date.today() - dt.timedelta(days=a.days)
+    hit = 0
+    for r in (to_record(p) for p in load_all()):
+        ds = re.findall(r"\d{4}-\d{2}-\d{2}", r["dates"])
+        last = dt.date.fromisoformat(ds[-1]) if ds else None
+        if r["status"] == "prototype" and last and last < cutoff:
+            print(f"{r['name']}: prototype, last touched {last}. Promote, use it, or mark abandoned.")
+            hit += 1
+    print(f"{hit} stale prototype(s)")
+    return 0
+
+
+# ------------------------------------------------------------------- new
+def cmd_new(a):
+    name = re.sub(r"[^a-z0-9]+", "_", a.name.lower()).strip("_")
+    d = PROJECTS / (a.group or "") / name
+    if d.exists(): sys.exit(f"{d} exists")
+    d.mkdir(parents=True)
+    tpl = (ROOT / "templates" / "prompts.md").read_text()
+    today = dt.date.today().isoformat()
+    title = a.name.replace("_", " ").title() if "_" in a.name or a.name.islower() else a.name
+    (d / "prompts.md").write_text(tpl.replace("{{TITLE}}", title).replace("{{TOOL}}", a.tool)
+                                  .replace("{{DATE}}", today).replace("{{FILE}}", f"{name}.html"))
+    print(f"created {d.relative_to(ROOT)}/prompts.md -- fill in the prompt, drop {name}.html next to it")
+    return 0
+
+
+# --------------------------------------------------------------- capture
+def _text(content):
+    if isinstance(content, str): return content
+    return "\n".join(b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text")
+
+
+def read_turns(jsonl):
+    """Yield dicts {prompt, output, model, start, end} per human prompt."""
+    turns, cur = [], None
+    for ln in Path(jsonl).read_text().splitlines():
+        try: ev = json.loads(ln)
+        except ValueError: continue
+        msg, ts = ev.get("message") or {}, ev.get("timestamp")
+        if ev.get("type") == "user" and not ev.get("isMeta") and not ev.get("isSidechain"):
+            c = msg.get("content")
+            if isinstance(c, list) and any(b.get("type") == "tool_result" for b in c if isinstance(b, dict)):
+                if cur: cur["end"] = ts
+                continue
+            t = _text(c).strip()
+            if not t or t.startswith(("<command-", "<local-command", "<system-reminder")): continue
+            cur = {"prompt": t, "output": "", "model": "", "start": ts, "end": ts}
+            turns.append(cur)
+        elif ev.get("type") == "assistant" and cur and not ev.get("isSidechain"):
+            t = _text(msg.get("content")).strip()
+            if t: cur["output"] = t          # last text block wins = the final message
+            cur["model"] = msg.get("model") or cur["model"]
+            cur["end"] = ts
+    return turns
+
+
+def _secs(a, b):
+    try:
+        p = lambda s: dt.datetime.fromisoformat(s.replace("Z", "+00:00"))
+        return max(0, round((p(b) - p(a)).total_seconds()))
+    except Exception:
+        return "TBD"
+
+
+def cmd_capture(a):
+    target = next(PROJECTS.rglob(f"{a.project}/prompts.md"), None)
+    if not target: sys.exit(f"no project folder named {a.project}; run `new` first")
+    existing = len(re.findall(r"^# Prompt", target.read_text(), re.M))
+    turns = read_turns(a.session)
+    if a.last: turns = turns[-a.last:]
+    out = []
+    for i, t in enumerate(turns, existing + 1):
+        day = (t["start"] or "")[:10] or "TBD"
+        out.append(f"\n# Prompt {i} (TBD: what this prompt is for):\n\n"
+                   f"> - **Tool:** Claude Code · {t['model'] or 'TBD'} · {day}\n"
+                   f"> - **Session:** {'fresh' if i == 1 else 'continued'} · attached: TBD\n"
+                   f"> - **Time:** {_secs(t['start'], t['end'])}s\n"
+                   f"> - **Verified:** not-run\n> - **Human edits:** TBD\n\n"
+                   f"{t['prompt']}\n\n## Output {i}:\n\n{t['output'] or 'TBD'}\n")
+    with target.open("a") as fh: fh.write("".join(out))
+    print(f"appended {len(turns)} prompt(s) to {target.relative_to(ROOT)}. "
+          "Verified defaults to not-run: raise it only if it is true.")
+    return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    n = sub.add_parser("new"); n.add_argument("name"); n.add_argument("--tool", default="Claude Code · TBD"); n.add_argument("--group")
+    c = sub.add_parser("check"); c.add_argument("--strict", action="store_true")
+    sub.add_parser("build"); sub.add_parser("stats")
+    s = sub.add_parser("stale"); s.add_argument("--days", type=int, default=60)
+    k = sub.add_parser("capture"); k.add_argument("session"); k.add_argument("project"); k.add_argument("--last", type=int)
+    a = ap.parse_args()
+    sys.exit({"new": cmd_new, "check": cmd_check, "build": cmd_build, "stats": cmd_stats,
+              "stale": cmd_stale, "capture": cmd_capture}[a.cmd](a))
+
+
+if __name__ == "__main__":
+    main()
