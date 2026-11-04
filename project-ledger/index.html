@@ -1,0 +1,41 @@
+<!doctype html><html lang="en"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Project Ledger</title>
+<style>
+:root{--bg:#FFFFFF;--fg:#000000;--sec:#262626;--mut:#525252;--card:#FAFAFA;--line:#D4D4D4;--accent:#206343}
+@media(prefers-color-scheme:dark){:root{--bg:#0E0E0E;--fg:#FFFFFF;--sec:#D4D4D4;--mut:#A3A3A3;--card:#0C0C0C;--line:#404040;--accent:#7BA892}}
+body{margin:0 auto;max-width:980px;padding:24px 16px;font:16px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--fg)}
+h1{margin:0}.sub{color:var(--mut);margin:.2em 0 1.2em}
+.bar{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
+input,select{font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+.card h3{margin:0 0 4px}.card a{color:var(--accent)}
+.tag,.pill{display:inline-block;font-size:12px;border:1px solid var(--line);border-radius:99px;padding:1px 8px;margin:2px 4px 2px 0;color:var(--mut)}
+.pill.keeper{color:var(--accent);border-color:var(--accent)}
+.mut{color:var(--mut);font-size:14px}
+</style>
+<h1>Project Ledger</h1>
+<p class="sub" id="sub"></p>
+<p class="mut"><a href="canvas.html" style="color:var(--accent)">Open as canvas</a></p>
+<div class="bar"><input id="q" placeholder="search…" type="search">
+<select id="st"><option value="">any status</option><option>keeper</option><option>prototype</option><option>abandoned</option></select>
+<select id="tg"><option value="">any tag</option></select>
+<select id="vf"><option value="">any verification</option><option>human-tested</option><option>agent-tested</option><option>syntax-checked</option><option>not-run</option></select></div>
+<div class="grid" id="g"></div>
+<script id="data" type="application/json">[{"name": "Tip Split", "folder": "projects/tip_split", "source": "projects/tip_split/prompts.md", "files": ["tip_split.html"], "open": "projects/tip_split/tip_split.html", "dates": "2026-11-04 \u2192 2026-11-04", "defaults": "Claude Code \u00b7 Sonnet 5.5", "tools": ["Claude Code \u00b7 Sonnet 5.5"], "status": "prototype", "use": "none yet", "artifact_reuse": "low", "prompt_reuse": "low", "tags": ["single-file-html", "productivity"], "takeaway": "Fixture project that shows the ledger format end to end; deliberately trivial.", "story_value": "none", "surprises": "none. This is a sample entry written to exercise the tooling, not a real usage record.", "prompt_count": 1, "verified": "agent-tested"}]</script>
+<script>
+const D=JSON.parse(document.getElementById('data').textContent);
+const $=id=>document.getElementById(id), esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+[...new Set(D.flatMap(p=>p.tags))].sort().forEach(t=>$('tg').add(new Option(t)));
+$('sub').textContent=D.length+' projects · '+D.filter(p=>p.status==='keeper').length+' keepers · built 2026-11-04';
+function draw(){const q=$('q').value.toLowerCase(),s=$('st').value,t=$('tg').value,v=$('vf').value;
+ const rank={keeper:0,prototype:1,abandoned:2};
+ $('g').innerHTML=D.filter(p=>(!s||p.status===s)&&(!t||p.tags.includes(t))&&(!v||p.verified===v)&&(!q||JSON.stringify(p).toLowerCase().includes(q)))
+ .sort((a,b)=>(rank[a.status]??3)-(rank[b.status]??3)||a.name.localeCompare(b.name))
+ .map(p=>`<div class="card"><h3>${p.open?`<a href="${esc(p.open)}">${esc(p.name)}</a>`:esc(p.name)}</h3>
+ <span class="pill ${esc(p.status)}">${esc(p.status)}</span><span class="pill">${esc(p.verified)}</span>
+ <p>${esc(p.takeaway)}</p><p class="mut">Use: ${esc(p.use)}<br>${esc(p.defaults)} · ${p.prompt_count} prompt(s) · ${esc(p.dates)}</p>
+ <p class="mut"><a href="${esc(p.source)}">prompts &amp; outputs</a></p>${p.tags.map(x=>`<span class="tag">${esc(x)}</span>`).join('')}</div>`).join('')||'<p class="mut">nothing matches</p>'}
+['q','st','tg','vf'].forEach(i=>$(i).addEventListener('input',draw));draw();
+</script></html>

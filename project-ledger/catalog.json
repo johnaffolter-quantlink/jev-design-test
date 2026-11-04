@@ -1,0 +1,29 @@
+[
+  {
+    "name": "Tip Split",
+    "folder": "projects/tip_split",
+    "source": "projects/tip_split/prompts.md",
+    "files": [
+      "tip_split.html"
+    ],
+    "open": "projects/tip_split/tip_split.html",
+    "dates": "2026-11-04 \u2192 2026-11-04",
+    "defaults": "Claude Code \u00b7 Sonnet 5.5",
+    "tools": [
+      "Claude Code \u00b7 Sonnet 5.5"
+    ],
+    "status": "prototype",
+    "use": "none yet",
+    "artifact_reuse": "low",
+    "prompt_reuse": "low",
+    "tags": [
+      "single-file-html",
+      "productivity"
+    ],
+    "takeaway": "Fixture project that shows the ledger format end to end; deliberately trivial.",
+    "story_value": "none",
+    "surprises": "none. This is a sample entry written to exercise the tooling, not a real usage record.",
+    "prompt_count": 1,
+    "verified": "agent-tested"
+  }
+]
