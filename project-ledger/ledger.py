@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""vibe -- tiny, dependency-free tooling for a ledger of one-off vibe-coded apps.
+"""ledger -- tiny, dependency-free tooling for a ledger of one-off AI-assisted apps.
 
 Reads the `prompts.md` convention (a superset of paulkaefer/vibe-coding's
 CONVENTIONS.md) and turns it into something queryable.
 
-  vibe.py new <name> [--tool T] [--group G]   scaffold a project folder
-  vibe.py check [--strict]                    lint every prompts.md
-  vibe.py build                               write catalog.json + index.html
-  vibe.py stats                               what's actually working?
-  vibe.py capture <session.jsonl> <project>   append prompts/outputs from a
+  ledger.py new <name> [--tool T] [--group G]   scaffold a project folder
+  ledger.py check [--strict]                    lint every prompts.md
+  ledger.py build                               write catalog.json, index.html and
+                                              canvas frames (canvas-frames.json)
+  ledger.py stats                               what's actually working?
+  ledger.py capture <session.jsonl> <project>   append prompts/outputs from a
                                               Claude Code transcript
-  vibe.py stale [--days N]                    prototypes nobody touched
+  ledger.py stale [--days N]                    prototypes nobody touched
 
 Markdown stays the source of truth; everything else is generated.
 """
@@ -166,26 +167,107 @@ def cmd_check(a):
     return 1 if errs or (a.strict and warns) else 0
 
 
+
+# ---------------------------------------------------------------- canvas
+# Emits frames in the shape used by quantlink-inc/canvas (lib/canvas/pages.ts):
+#   Frame = {id,x,y,w,h,title,kind,spec:{root,elements:{id:{type,props,children}}}}
+# using only components its registry defines: Stack, Heading, Text, Metric, Sheet.
+def _el(t, props, children=None):
+    return {"type": t, "props": props, "children": children or []}
+
+
+def canvas_frames(recs):
+    frames = []
+    kc = sum(r["status"] == "keeper" for r in recs)
+    frames.append({"id": "ledger-summary", "x": 0, "y": 0, "w": 480, "h": 320, "title": "Summary", "kind": "page",
+        "spec": {"root": "root", "elements": {
+            "root": _el("Stack", {"direction": "column", "gap": "sm"}, ["h", "m1", "m2", "m3"]),
+            "h": _el("Heading", {"text": "Project Ledger", "level": "h3"}),
+            "m1": _el("Metric", {"label": "Projects", "value": str(len(recs)), "trend": None}),
+            "m2": _el("Metric", {"label": "Keepers", "value": str(kc), "trend": None}),
+            "m3": _el("Metric", {"label": "Prompts recorded", "value": str(sum(r["prompt_count"] for r in recs)), "trend": None}),
+        }}})
+    cols = ["Project", "Status", "Verified", "Use"]
+    frames.append({"id": "ledger-catalog", "x": 520, "y": 0, "w": 760, "h": 320, "title": "Catalog", "kind": "sheet",
+        "spec": {"root": "root", "elements": {
+            "root": _el("Stack", {"direction": "column", "gap": "sm"}, ["h", "t"]),
+            "h": _el("Heading", {"text": "Catalog", "level": "h3"}),
+            "t": _el("Sheet", {"columns": cols, "rows": [[r["name"], r["status"], r["verified"], r["use"]] for r in recs]}),
+        }}})
+    for i, r in enumerate(recs):
+        fid = "ledger-" + re.sub(r"[^a-z0-9]+", "-", r["folder"].lower()).strip("-")
+        frames.append({"id": fid, "x": (i % 3) * 480, "y": 360 + (i // 3) * 340, "w": 440, "h": 300,
+            "title": r["name"], "kind": "page",
+            "spec": {"root": "root", "elements": {
+                "root": _el("Stack", {"direction": "column", "gap": "sm"}, ["h", "t", "m1", "m2", "m3", "g"]),
+                "h": _el("Heading", {"text": r["name"], "level": "h3"}),
+                "t": _el("Text", {"text": r["takeaway"], "variant": "muted"}),
+                "m1": _el("Metric", {"label": "Status", "value": r["status"], "trend": None}),
+                "m2": _el("Metric", {"label": "Verified", "value": r["verified"], "trend": None}),
+                "m3": _el("Metric", {"label": "Use", "value": r["use"], "trend": None}),
+                "g": _el("Text", {"text": ", ".join(r["tags"]) or "no tags", "variant": "caption"}),
+            }}})
+    return frames
+
+
+VIEWER = """<!doctype html><html lang="en"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Project Ledger Canvas</title>
+<style>
+:root{--bg:#FFFFFF;--fg:#000000;--mut:#525252;--card:#FAFAFA;--line:#D4D4D4;--accent:#206343}
+@media(prefers-color-scheme:dark){:root{--bg:#0E0E0E;--fg:#FFFFFF;--mut:#A3A3A3;--card:#0C0C0C;--line:#404040;--accent:#7BA892}}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,sans-serif}
+#bar{position:fixed;top:0;left:0;right:0;padding:8px 16px;display:flex;gap:12px;align-items:center;z-index:2;background:var(--bg);border-bottom:1px solid var(--line)}
+#bar a{color:var(--accent)}#stage{position:absolute;inset:41px 0 0 0;cursor:grab;touch-action:none}
+#world{position:absolute;transform-origin:0 0}
+.frame{position:absolute;box-sizing:border-box;background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.frame>.t{padding:6px 12px;border-bottom:1px solid var(--line);color:var(--mut);font-size:12px}
+.frame>.b{padding:12px;display:grid;gap:6px;align-content:start}
+.metric{display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:6px}.metric span:first-child{color:var(--mut);font-size:12px}
+table{width:100%;border-collapse:collapse;font-size:12px}th{text-align:left;color:var(--mut)}td,th{padding:4px;border-bottom:1px solid var(--line)}
+.muted{color:var(--mut)}.caption{color:var(--mut);font-size:12px}h3{margin:0}
+</style><div id="bar"><b>Project Ledger</b><a href="index.html">Back to index</a><span class="muted" id="n"></span><span class="muted">drag to pan, scroll to zoom</span></div>
+<div id="stage"><div id="world"></div></div>
+<script id="d" type="application/json">__FRAMES__</script>
+<script>
+const F=JSON.parse(document.getElementById('d').textContent),w=document.getElementById('world'),st=document.getElementById('stage');
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function node(sp,id){const e=sp.elements[id],p=e.props,k=()=>e.children.map(c=>node(sp,c)).join('');
+ switch(e.type){case'Stack':return'<div style="display:grid;gap:8px">'+k()+'</div>';
+ case'Heading':return'<h3>'+esc(p.text)+'</h3>';case'Text':return'<div class="'+esc(p.variant||'')+'">'+esc(p.text)+'</div>';
+ case'Metric':return'<div class="metric"><span>'+esc(p.label)+'</span><b>'+esc(p.value)+'</b></div>';
+ case'Sheet':return'<table><thead><tr>'+p.columns.map(c=>'<th>'+esc(c)+'</th>').join('')+'</tr></thead><tbody>'+p.rows.map(r=>'<tr>'+r.map(c=>'<td>'+esc(c)+'</td>').join('')+'</tr>').join('')+'</tbody></table>';}
+ return''}
+w.innerHTML=F.map(f=>`<div class="frame" data-id="${esc(f.id)}" style="left:${f.x}px;top:${f.y}px;width:${f.w}px;height:${f.h}px"><div class="t">${esc(f.title)} · ${esc(f.kind)}</div><div class="b">${node(f.spec,f.spec.root)}</div></div>`).join('');
+document.getElementById('n').textContent=F.length+' frames';
+let x=24,y=24,z=.8,drag=null;const ap=()=>w.style.transform=`translate(${x}px,${y}px) scale(${z})`;ap();
+st.addEventListener('pointerdown',e=>{drag=[e.clientX-x,e.clientY-y];st.setPointerCapture(e.pointerId)});
+st.addEventListener('pointermove',e=>{if(drag){x=e.clientX-drag[0];y=e.clientY-drag[1];ap()}});
+st.addEventListener('pointerup',()=>drag=null);
+st.addEventListener('wheel',e=>{e.preventDefault();const k=e.deltaY<0?1.1:.9,r=st.getBoundingClientRect(),px=e.clientX-r.left,py=e.clientY-r.top;
+ x=px-(px-x)*k;y=py-(py-y)*k;z*=k;ap()},{passive:false});
+</script></html>"""
+
 # ----------------------------------------------------------------- build
 PAGE = """<!doctype html><html lang="en"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Vibe Ledger</title>
+<title>Project Ledger</title>
 <style>
-:root{--bg:#fff;--fg:#1b1b1f;--mut:#6b6b76;--card:#f5f5f8;--line:#dcdce4;--acc:#4b4bd6}
-@media(prefers-color-scheme:dark){:root{--bg:#121216;--fg:#ececf1;--mut:#9a9aa8;--card:#1c1c22;--line:#2f2f3a;--acc:#9a9aff}}
+:root{--bg:#FFFFFF;--fg:#000000;--sec:#262626;--mut:#525252;--card:#FAFAFA;--line:#D4D4D4;--accent:#206343}
+@media(prefers-color-scheme:dark){:root{--bg:#0E0E0E;--fg:#FFFFFF;--sec:#D4D4D4;--mut:#A3A3A3;--card:#0C0C0C;--line:#404040;--accent:#7BA892}}
 body{margin:0 auto;max-width:980px;padding:24px 16px;font:16px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--fg)}
 h1{margin:0}.sub{color:var(--mut);margin:.2em 0 1.2em}
 .bar{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
 input,select{font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg)}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
-.card h3{margin:0 0 4px}.card a{color:var(--acc)}
+.card h3{margin:0 0 4px}.card a{color:var(--accent)}
 .tag,.pill{display:inline-block;font-size:12px;border:1px solid var(--line);border-radius:99px;padding:1px 8px;margin:2px 4px 2px 0;color:var(--mut)}
-.pill.keeper{color:var(--acc);border-color:var(--acc)}
+.pill.keeper{color:var(--accent);border-color:var(--accent)}
 .mut{color:var(--mut);font-size:14px}
 </style>
-<h1>Vibe Ledger</h1>
+<h1>Project Ledger</h1>
 <p class="sub" id="sub"></p>
+<p class="mut"><a href="canvas.html" style="color:var(--accent)">Open as canvas</a></p>
 <div class="bar"><input id="q" placeholder="search…" type="search">
 <select id="st"><option value="">any status</option><option>keeper</option><option>prototype</option><option>abandoned</option></select>
 <select id="tg"><option value="">any tag</option></select>
@@ -215,7 +297,10 @@ def cmd_build(a):
     data = json.dumps(recs).replace("</", "<\\/")
     (ROOT / "index.html").write_text(
         PAGE.replace("__DATA__", data).replace("__DATE__", dt.date.today().isoformat()))
-    print(f"wrote catalog.json and index.html ({len(recs)} projects)")
+    frames = canvas_frames(recs)
+    (ROOT / "canvas-frames.json").write_text(json.dumps(frames, indent=2) + "\n")
+    (ROOT / "canvas.html").write_text(VIEWER.replace("__FRAMES__", json.dumps(frames).replace("</", "<\\/")))
+    print(f"wrote catalog.json, index.html, canvas-frames.json, canvas.html ({len(recs)} projects)")
     return 0
 
 

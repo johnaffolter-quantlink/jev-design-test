@@ -1,18 +1,47 @@
-# Vibe Ledger
+# Project Ledger
 
-A framework for tracking one-off vibe-coded apps. Week 8 homework, Option 2. It extends Paul Kaefer's `prompts.md` convention from `paulkaefer/vibe-coding` and stays compatible with it: his files parse unchanged.
+A framework for tracking one-off AI-assisted apps. EIS 606 Week 8 homework, Option 2. It extends Paul Kaefer's `prompts.md` convention from `paulkaefer/vibe-coding` and stays compatible with it: his files parse unchanged.
 
 ```
-vibe-ledger/
+project-ledger/
   CONVENTIONS.md     the rules (Paul's, plus scope, graduation, versioning)
-  vibe.py            stdlib-only CLI: new / capture / check / build / stats / stale
+  canvas_frames.check.mjs  invariant check for the canvas export
+  ledger.py            stdlib-only CLI: new / capture / check / build / stats / stale
   templates/         prompts.md scaffold
   projects/<name>/   deliverable + prompts.md   (groups: projects/<group>/<name>/)
   catalog.json       GENERATED from the markdown
   index.html         GENERATED searchable landing page
+  canvas-frames.json GENERATED frames for the Quantlink canvas
+  canvas.html        GENERATED pan/zoom preview of those frames
+  screenshots/       UI captures (see below)
 ```
 
-Try it: `python3 vibe.py check && python3 vibe.py build && python3 vibe.py stats`.
+Try it: `python3 ledger.py check && python3 ledger.py build && python3 ledger.py stats && node canvas_frames.check.mjs`.
+
+## UI
+
+Screenshots in `screenshots/` were captured headless (Playwright) from a scratch copy that had five extra placeholder entries, so the pages show more than the single committed sample. Those placeholder entries are not in this repo.
+
+| View | Light | Dark |
+| --- | --- | --- |
+| Index (all projects) | `screenshots/index-light.png` | `screenshots/index-dark.png` |
+| Index filtered to keepers | `screenshots/index-keepers-light.png` | `screenshots/index-keepers-dark.png` |
+| Canvas preview | `screenshots/canvas-light.png` | `screenshots/canvas-dark.png` |
+| Phone width | `screenshots/index-mobile.png` | |
+
+## Alignment with Quantlink
+
+Read from `quantlink-inc/canvas` and `quantlink-inc/quantlink-main` (read only; nothing in either repo was changed).
+
+| Quantlink convention | Where it shows up here |
+| --- | --- |
+| Canvas `Frame` shape: `{id, x, y, w, h, title, kind, spec}` with a json-render `Spec` (`lib/canvas/pages.ts`) | `ledger.py build` writes `canvas-frames.json` in that shape: a summary frame, a catalog frame (`kind: sheet`) and one `page` frame per project |
+| Registry components (`Stack`, `Heading`, `Text`, `Metric`, `Sheet`) | The export uses only those five types |
+| `*.check.ts` invariant scripts that print `<name>.check ok` | `canvas_frames.check.mjs`: unique ids, valid kinds, every child resolves, no frame overlap |
+| Design tokens in `packages/ui/src/tokens.css` (`surface-base`, `surface-raised`, `border-default`, `text-primary`, `text-muted`, `text-positive`) | `index.html` and `canvas.html` use the light and dark values of those tokens as CSS variables |
+| Kebab-case frame ids and refs | Frame ids are `ledger-<project>` |
+
+**Not done, and worth being clear about:** the frames have not been loaded into the real canvas app. The check validates against a component list copied by hand from `lib/canvas/registry.tsx`, so it can drift. The colour values are copied from `tokens.css`, not imported from `@quantlink/ui`. `canvas.html` is a small stand-in renderer, not the canvas's own. Importing `canvas-frames.json` into the canvas (for example through its `/api/examples` route) is the next step and needs someone who can run that app.
 
 ## What Paul cares about, and where it lives
 
