@@ -98,7 +98,7 @@ Use the highest level that is true. If a prompt moves up a level later, edit the
 
 **Graduate it to its own repo** when any of these become true: it needs a build step or dependencies you must keep updated; it holds a secret or talks to a paid API; someone other than you depends on it; you've edited it in more than three separate sessions; it outgrew ~1,000 lines or one file plus assets. Leave a `Graduated: <url>` line in the header and set Status to `abandoned` here, so the prompt history stays but the ledger doesn't claim ownership.
 
-**Retire it** when a prototype sits untouched for 60 days (`ledger.py stale`). Promote, use it, or mark it `abandoned`. Abandoned projects stay, because their Surprises are the useful part.
+**Retire it** when a prototype sits untouched for 60 days. Promote, use it, or mark it `abandoned`. Abandoned projects stay, because their Surprises are the useful part.
 
 ## Versioning
 
@@ -120,10 +120,10 @@ Run `python3 ledger.py` (stdlib only, Python 3.8+) from this folder:
 | `new <name>` | Scaffold a folder and `prompts.md` with every field present as `TBD` |
 | `capture <session.jsonl> <project>` | Append prompt and final-output sections from a Claude Code transcript, with timing and model filled in and Verified set to `not-run` |
 | `check` | Lint: required fields, allowed values, known tags, listed files exist, and "keeper requires verification" |
-| `build` | Regenerate `catalog.json` and `index.html` from the markdown |
-| `stats` / `stale` | How much of this was actually worth it |
+| `build` | Regenerate `index.html` and the canvas files from the markdown |
+| `stats` | How much of this was actually worth it |
 
-`index.html` and `catalog.json` are generated. Don't edit them by hand.
+`index.html`, `canvas.html` and `canvas-frames.json` are generated. Don't edit them by hand.
 
 ## Tags
 
