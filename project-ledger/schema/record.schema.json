@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "project-ledger/record.schema.json",
+  "title": "Ledger record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "folder",
+    "source",
+    "files",
+    "open",
+    "dates",
+    "defaults",
+    "tools",
+    "status",
+    "use",
+    "artifact_reuse",
+    "prompt_reuse",
+    "tags",
+    "takeaway",
+    "story_value",
+    "surprises",
+    "prompt_count",
+    "verified"
+  ],
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "folder": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string"
+    },
+    "dates": {
+      "type": "string"
+    },
+    "defaults": {
+      "type": "string"
+    },
+    "use": {
+      "type": "string"
+    },
+    "takeaway": {
+      "type": "string"
+    },
+    "surprises": {
+      "type": "string"
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "open": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "status": {
+      "enum": [
+        "prototype",
+        "keeper",
+        "abandoned",
+        "TBD"
+      ]
+    },
+    "story_value": {
+      "enum": [
+        "none",
+        "anecdote",
+        "case study",
+        "chapter-worthy",
+        "TBD"
+      ]
+    },
+    "artifact_reuse": {
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "TBD"
+      ]
+    },
+    "prompt_reuse": {
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "TBD"
+      ]
+    },
+    "verified": {
+      "enum": [
+        "not-run",
+        "syntax-checked",
+        "agent-tested",
+        "human-tested",
+        "TBD"
+      ]
+    },
+    "prompt_count": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

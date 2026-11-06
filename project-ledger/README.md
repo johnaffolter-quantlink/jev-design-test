@@ -4,18 +4,55 @@ A framework for tracking one-off AI-assisted apps. EIS 606 Week 8 homework, Opti
 
 ```
 project-ledger/
-  CONVENTIONS.md     the rules (Paul's, plus scope, graduation, versioning)
-  canvas_frames.check.mjs  invariant check for the canvas export
-  ledger.py            stdlib-only CLI: new / capture / check / build / stats
-  templates/         prompts.md scaffold
-  projects/<name>/   deliverable + prompts.md   (groups: projects/<group>/<name>/)
-  index.html         GENERATED searchable landing page
-  canvas-frames.json GENERATED frames for the Quantlink canvas
-  canvas.html        GENERATED pan/zoom preview of those frames
-  screenshots/       UI captures (see below)
+  ledger.py                entry point (python3 ledger.py <command>)
+  ledgerlib/               the code, one concern per module
+    schema.py              single source of truth: fields, enums, issue codes, JSON Schema
+    model.py               Project, Prompt
+    parse.py               prompts.md -> Project (pure)
+    render.py              Project -> prompts.md (the inverse of parse)
+    check.py               validate(): stable issue codes, no I/O
+    export.py              records, canvas frames, generated pages
+    capture.py             Claude Code transcript -> prompt sections
+    cli.py                 argument handling and file I/O only
+  schema/record.schema.json  JSON Schema for catalog records (generated from schema.py)
+  tests/                   property-based tests (Hypothesis)
+  templates/               prompts.md scaffold, index.html, canvas.html
+  CONVENTIONS.md           the rules (Paul's, plus scope, graduation, versioning)
+  canvas_frames.check.mjs  canvas-side invariant check, in the Quantlink *.check style
+  projects/<name>/         deliverable + prompts.md   (groups: projects/<group>/<name>/)
+  index.html               GENERATED searchable landing page
+  canvas-frames.json       GENERATED frames for the Quantlink canvas
+  canvas.html              GENERATED pan/zoom preview of those frames
+  screenshots/             UI captures (see below)
 ```
 
-Try it: `python3 ledger.py check && python3 ledger.py build && python3 ledger.py stats && node canvas_frames.check.mjs`.
+The ledger itself needs only the Python standard library. Tests need `pip install -r requirements-dev.txt`.
+
+Try it: `python3 ledger.py check && python3 ledger.py build && python3 ledger.py stats && node canvas_frames.check.mjs && python3 -m pytest tests -q`.
+
+## Standards and testing
+
+**One schema.** `ledgerlib/schema.py` defines every field, allowed value and issue code once. The parser, validator, exporter and JSON Schema all import it, so they cannot disagree. Validation issues carry stable codes (`E001` missing field, `E009` unverified keeper, `W003` keeper with no real use, and so on) so tools match on codes, never on message text.
+
+**Catalog records have a published JSON Schema** (`schema/record.schema.json`, draft 2020-12; `python3 ledger.py schema` prints it). A test fails if the committed file drifts from `schema.py`.
+
+**Property-based tests** (`tests/test_properties.py`, Hypothesis) generate random projects and hostile text and assert invariants rather than examples:
+
+| Property | Meaning |
+| --- | --- |
+| Render then parse preserves structure | Any prompt text, including lines like `# Prompt 9` or `> - **Verified:**`, parses back to the same fields and prompt count |
+| Validation is total and coded | Every issue has a known code whose letter matches its severity; removing any header field is always reported |
+| Verification is monotonic | A project's level is the maximum over its prompts; adding a prompt never lowers it |
+| Records conform to the schema | `to_record` output always validates |
+| Canvas frames are well formed | Unique ids, resolvable children, only registry components, no overlap, including when many projects share a folder |
+| Generated pages are injection-safe | The embedded JSON always parses back and can never close its own `<script>` tag |
+| Capture is robust | Arbitrary or malformed transcripts never raise; N human turns always become N parsed prompts |
+
+**What the properties found.** Two real defects, both fixed: a prompt whose first line began with `>` (a markdown quote) was silently swallowed as metadata, and a whitespace-only output was not normalised to `TBD` until a second write. Captured prompts that contain structural lines such as `# Prompt 2` are now escaped on write, so a pasted markdown prompt can no longer split a project in two. I confirmed the tests can fail by reintroducing the unsafe-JSON embedding on purpose; they caught it.
+
+**CI.** `.github/workflows/ledger.yml` runs the tests, the validator, the canvas check, and confirms the generated files are current.
+
+**Not covered.** The tests run in-process on generated data; they don't exercise the CLI's file handling beyond one smoke test of `check`, and the CI workflow has not yet run on GitHub. Python 3.13 is what I ran locally; older versions are untested.
 
 ## UI
 

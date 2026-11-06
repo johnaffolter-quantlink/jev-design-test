@@ -113,15 +113,16 @@ These are ignored by the checker if absent: `Graduated:` (URL), `Depends on:` (C
 
 ## Tooling
 
-Run `python3 ledger.py` (stdlib only, Python 3.8+) from this folder:
+Run `python3 ledger.py` from this folder (standard library only):
 
 | Command | Does |
 | --- | --- |
 | `new <name>` | Scaffold a folder and `prompts.md` with every field present as `TBD` |
 | `capture <session.jsonl> <project>` | Append prompt and final-output sections from a Claude Code transcript, with timing and model filled in and Verified set to `not-run` |
-| `check` | Lint: required fields, allowed values, known tags, listed files exist, and "keeper requires verification" |
+| `check` | Validate: required fields, allowed values, known tags, listed files exist, and "keeper requires verification". Each issue has a stable code (`E001`...`W005`, defined in `ledgerlib/schema.py`) |
 | `build` | Regenerate `index.html` and the canvas files from the markdown |
 | `stats` | How much of this was actually worth it |
+| `schema` | Print the JSON Schema for catalog records |
 
 `index.html`, `canvas.html` and `canvas-frames.json` are generated. Don't edit them by hand.
 

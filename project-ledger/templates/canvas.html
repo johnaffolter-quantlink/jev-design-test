@@ -1,0 +1,36 @@
+<!doctype html><html lang="en"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Project Ledger Canvas</title>
+<style>
+:root{--bg:#FFFFFF;--fg:#000000;--mut:#525252;--card:#FAFAFA;--line:#D4D4D4;--accent:#206343}
+@media(prefers-color-scheme:dark){:root{--bg:#0E0E0E;--fg:#FFFFFF;--mut:#A3A3A3;--card:#0C0C0C;--line:#404040;--accent:#7BA892}}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,sans-serif}
+#bar{position:fixed;top:0;left:0;right:0;padding:8px 16px;display:flex;gap:12px;align-items:center;z-index:2;background:var(--bg);border-bottom:1px solid var(--line)}
+#bar a{color:var(--accent)}#stage{position:absolute;inset:41px 0 0 0;cursor:grab;touch-action:none}
+#world{position:absolute;transform-origin:0 0}
+.frame{position:absolute;box-sizing:border-box;background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.frame>.t{padding:6px 12px;border-bottom:1px solid var(--line);color:var(--mut);font-size:12px}
+.frame>.b{padding:12px;display:grid;gap:6px;align-content:start}
+.metric{display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:6px}.metric span:first-child{color:var(--mut);font-size:12px}
+table{width:100%;border-collapse:collapse;font-size:12px}th{text-align:left;color:var(--mut)}td,th{padding:4px;border-bottom:1px solid var(--line)}
+.muted{color:var(--mut)}.caption{color:var(--mut);font-size:12px}h3{margin:0}
+</style><div id="bar"><b>Project Ledger</b><a href="index.html">Back to index</a><span class="muted" id="n"></span><span class="muted">drag to pan, scroll to zoom</span></div>
+<div id="stage"><div id="world"></div></div>
+<script id="d" type="application/json">__FRAMES__</script>
+<script>
+const F=JSON.parse(document.getElementById('d').textContent),w=document.getElementById('world'),st=document.getElementById('stage');
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function node(sp,id){const e=sp.elements[id],p=e.props,k=()=>e.children.map(c=>node(sp,c)).join('');
+ switch(e.type){case'Stack':return'<div style="display:grid;gap:8px">'+k()+'</div>';
+ case'Heading':return'<h3>'+esc(p.text)+'</h3>';case'Text':return'<div class="'+esc(p.variant||'')+'">'+esc(p.text)+'</div>';
+ case'Metric':return'<div class="metric"><span>'+esc(p.label)+'</span><b>'+esc(p.value)+'</b></div>';
+ case'Sheet':return'<table><thead><tr>'+p.columns.map(c=>'<th>'+esc(c)+'</th>').join('')+'</tr></thead><tbody>'+p.rows.map(r=>'<tr>'+r.map(c=>'<td>'+esc(c)+'</td>').join('')+'</tr>').join('')+'</tbody></table>';}
+ return''}
+w.innerHTML=F.map(f=>`<div class="frame" data-id="${esc(f.id)}" style="left:${f.x}px;top:${f.y}px;width:${f.w}px;height:${f.h}px"><div class="t">${esc(f.title)} · ${esc(f.kind)}</div><div class="b">${node(f.spec,f.spec.root)}</div></div>`).join('');
+document.getElementById('n').textContent=F.length+' frames';
+let x=24,y=24,z=.8,drag=null;const ap=()=>w.style.transform=`translate(${x}px,${y}px) scale(${z})`;ap();
+st.addEventListener('pointerdown',e=>{drag=[e.clientX-x,e.clientY-y];st.setPointerCapture(e.pointerId)});
+st.addEventListener('pointermove',e=>{if(drag){x=e.clientX-drag[0];y=e.clientY-drag[1];ap()}});
+st.addEventListener('pointerup',()=>drag=null);
+st.addEventListener('wheel',e=>{e.preventDefault();const k=e.deltaY<0?1.1:.9,r=st.getBoundingClientRect(),px=e.clientX-r.left,py=e.clientY-r.top;
+ x=px-(px-x)*k;y=py-(py-y)*k;z*=k;ap()},{passive:false});
+</script></html>
