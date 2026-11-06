@@ -6,12 +6,11 @@ CONVENTIONS.md) and turns it into something queryable.
 
   ledger.py new <name> [--tool T] [--group G]   scaffold a project folder
   ledger.py check [--strict]                    lint every prompts.md
-  ledger.py build                               write catalog.json, index.html and
+  ledger.py build                               write index.html and
                                               canvas frames (canvas-frames.json)
   ledger.py stats                               what's actually working?
   ledger.py capture <session.jsonl> <project>   append prompts/outputs from a
                                               Claude Code transcript
-  ledger.py stale [--days N]                    prototypes nobody touched
 
 Markdown stays the source of truth; everything else is generated.
 """
@@ -293,14 +292,13 @@ function draw(){const q=$('q').value.toLowerCase(),s=$('st').value,t=$('tg').val
 
 def cmd_build(a):
     recs = [to_record(p) for p in load_all()]
-    (ROOT / "catalog.json").write_text(json.dumps(recs, indent=2) + "\n")
     data = json.dumps(recs).replace("</", "<\\/")
     (ROOT / "index.html").write_text(
         PAGE.replace("__DATA__", data).replace("__DATE__", dt.date.today().isoformat()))
     frames = canvas_frames(recs)
     (ROOT / "canvas-frames.json").write_text(json.dumps(frames, indent=2) + "\n")
     (ROOT / "canvas.html").write_text(VIEWER.replace("__FRAMES__", json.dumps(frames).replace("</", "<\\/")))
-    print(f"wrote catalog.json, index.html, canvas-frames.json, canvas.html ({len(recs)} projects)")
+    print(f"wrote index.html, canvas-frames.json, canvas.html ({len(recs)} projects)")
     return 0
 
 
@@ -319,19 +317,6 @@ def cmd_stats(a):
     print(f"actually used  {len(used)}/{len(recs)}")
     mul = [r for r in recs if r["prompt_count"] > 1]
     print(f"needed >1 prompt: {len(mul)}/{len(recs)}")
-    return 0
-
-
-def cmd_stale(a):
-    cutoff = dt.date.today() - dt.timedelta(days=a.days)
-    hit = 0
-    for r in (to_record(p) for p in load_all()):
-        ds = re.findall(r"\d{4}-\d{2}-\d{2}", r["dates"])
-        last = dt.date.fromisoformat(ds[-1]) if ds else None
-        if r["status"] == "prototype" and last and last < cutoff:
-            print(f"{r['name']}: prototype, last touched {last}. Promote, use it, or mark abandoned.")
-            hit += 1
-    print(f"{hit} stale prototype(s)")
     return 0
 
 
@@ -415,11 +400,10 @@ def main():
     n = sub.add_parser("new"); n.add_argument("name"); n.add_argument("--tool", default="Claude Code · TBD"); n.add_argument("--group")
     c = sub.add_parser("check"); c.add_argument("--strict", action="store_true")
     sub.add_parser("build"); sub.add_parser("stats")
-    s = sub.add_parser("stale"); s.add_argument("--days", type=int, default=60)
     k = sub.add_parser("capture"); k.add_argument("session"); k.add_argument("project"); k.add_argument("--last", type=int)
     a = ap.parse_args()
     sys.exit({"new": cmd_new, "check": cmd_check, "build": cmd_build, "stats": cmd_stats,
-              "stale": cmd_stale, "capture": cmd_capture}[a.cmd](a))
+              "capture": cmd_capture}[a.cmd](a))
 
 
 if __name__ == "__main__":

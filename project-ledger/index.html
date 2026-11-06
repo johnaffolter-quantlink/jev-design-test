@@ -28,7 +28,7 @@ input,select{font:inherit;padding:6px 10px;border:1px solid var(--line);border-r
 const D=JSON.parse(document.getElementById('data').textContent);
 const $=id=>document.getElementById(id), esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 [...new Set(D.flatMap(p=>p.tags))].sort().forEach(t=>$('tg').add(new Option(t)));
-$('sub').textContent=D.length+' projects · '+D.filter(p=>p.status==='keeper').length+' keepers · built 2026-11-04';
+$('sub').textContent=D.length+' projects · '+D.filter(p=>p.status==='keeper').length+' keepers · built 2026-11-06';
 function draw(){const q=$('q').value.toLowerCase(),s=$('st').value,t=$('tg').value,v=$('vf').value;
  const rank={keeper:0,prototype:1,abandoned:2};
  $('g').innerHTML=D.filter(p=>(!s||p.status===s)&&(!t||p.tags.includes(t))&&(!v||p.verified===v)&&(!q||JSON.stringify(p).toLowerCase().includes(q)))

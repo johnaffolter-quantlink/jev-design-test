@@ -6,10 +6,9 @@ A framework for tracking one-off AI-assisted apps. EIS 606 Week 8 homework, Opti
 project-ledger/
   CONVENTIONS.md     the rules (Paul's, plus scope, graduation, versioning)
   canvas_frames.check.mjs  invariant check for the canvas export
-  ledger.py            stdlib-only CLI: new / capture / check / build / stats / stale
+  ledger.py            stdlib-only CLI: new / capture / check / build / stats
   templates/         prompts.md scaffold
   projects/<name>/   deliverable + prompts.md   (groups: projects/<group>/<name>/)
-  catalog.json       GENERATED from the markdown
   index.html         GENERATED searchable landing page
   canvas-frames.json GENERATED frames for the Quantlink canvas
   canvas.html        GENERATED pan/zoom preview of those frames
@@ -25,7 +24,6 @@ Screenshots in `screenshots/` were captured headless (Playwright) from a scratch
 | View | Light | Dark |
 | --- | --- | --- |
 | Index (all projects) | `screenshots/index-light.png` | `screenshots/index-dark.png` |
-| Index filtered to keepers | `screenshots/index-keepers-light.png` | `screenshots/index-keepers-dark.png` |
 | Canvas preview | `screenshots/canvas-light.png` | `screenshots/canvas-dark.png` |
 | Phone width | `screenshots/index-mobile.png` | |
 
@@ -61,9 +59,9 @@ Read from `quantlink-inc/canvas` and `quantlink-inc/quantlink-main` (read only; 
 
 **Who is this for? Git-comfortable people first, with a floor for everyone else.** Git gives versioning and diffs for free, and the tooling assumes it. But nothing requires it: the tool reads plain folders, `index.html` is a static file you can open from disk, and the only required habit is "put the prompt next to the file". A non-git user gets a catalog, not versioning, and I think that is the right trade. Making git invisible would need a hosted product, which defeats "no repo needed".
 
-**Tools for people who already have a pile.** `new` makes every field exist as `TBD` so the cheapest entry is ten seconds. `capture` backfills from transcripts you already have, which is how a person with 40 old apps would catch up. `stats` and `stale` answer "is this habit paying off?" and "what is rotting?". The tool deliberately has no AI call in it: summarising your own work is where an LLM would invent the Takeaway and Surprises that make the record worth reading.
+**Tools for people who already have a pile.** `new` makes every field exist as `TBD` so the cheapest entry is ten seconds. `capture` backfills from transcripts you already have, which is how a person with 40 old apps would catch up. `stats` answers "is this habit paying off?". The tool deliberately has no AI call in it: summarising your own work is where an LLM would invent the Takeaway and Surprises that make the record worth reading.
 
-**What this is for.** One-off apps that don't merit their own repository. That definition needs an exit, or the ledger becomes a junkyard, so `CONVENTIONS.md` adds graduation rules (build step, secrets, other users, more than three sessions) and a 60-day staleness rule for prototypes.
+**What this is for.** One-off apps that don't merit their own repository. That definition needs an exit, or the ledger becomes a junkyard, so `CONVENTIONS.md` adds graduation rules (build step, secrets, other users, more than three sessions) and a 60-day rule for prototypes that sit untouched (checked by eye, no command).
 
 ## Limits I know about
 
