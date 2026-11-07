@@ -1,0 +1,29 @@
+name: ledger
+on:
+  pull_request:
+    paths: ["project-ledger/**", ".github/workflows/ledger.yml"]
+  push:
+    branches: [master]
+    paths: ["project-ledger/**"]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: project-ledger
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest tests -q
+      - run: python ledger.py check
+      - name: Generated files are current
+        run: |
+          python ledger.py build
+          git diff --exit-code -- canvas-frames.json canvas.html
+      - run: node canvas_frames.check.mjs
